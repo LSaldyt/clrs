@@ -1163,7 +1163,7 @@ def bellman_ford(A: _Array, s: int) -> _Out:
       })
 
   d = np.zeros(A.shape[0])
-  pi = np.arange(A.shape[0])
+  pi = np.full(A.shape[0], -1)
   msk = np.zeros(A.shape[0])
   d[s] = 0
   msk[s] = 1
