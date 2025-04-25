@@ -216,23 +216,51 @@ class GATv2(Processor):
     assert graph_fts.shape[:-1] == (b,)
     assert adj_mat.shape == (b, n, n)
 
-    z = jnp.concatenate([node_fts, hidden], axis=-1)
-    m = hk.Linear(self.out_size)
-    skip = hk.Linear(self.out_size)
+    print('node_fts', node_fts.shape)
+    print(node_fts)
 
-    bias_mat = (adj_mat - 1.0) * 1e9
+    # calc_edge_info = True
+    calc_edge_info = False
+    # edge_fts = jnp.ones_like(edge_fts)
+
+    if calc_edge_info:
+        # print('node', node_fts.shape)
+        # print('hid',  hidden.shape)
+        print('edge', edge_fts.shape)
+        print(edge_fts)
+        b, n, n, f = edge_fts.shape
+        z = jnp.concatenate([node_fts, hidden,
+                             edge_fts.reshape((b, n, n * f))
+                              ], axis=-1)
+        print('z', z.shape)
+        print(z)
+        # exit()
+
+    else:
+        z = jnp.concatenate([node_fts, hidden], axis=-1)
+    # print('z', z.shape, z)
+    m    = hk.Linear(self.out_size, name='value')
+    skip = hk.Linear(self.out_size, name='skip')
+
+    print('adj_mat')
+    print(adj_mat)
+    print(jnp.eye(adj_mat.shape[-1]))
+    print(adj_mat - jnp.eye(adj_mat.shape[-1]))
+    print(adj_mat - jnp.eye(adj_mat.shape[-1]) - 1)
+    
+    bias_mat = (adj_mat - jnp.eye(adj_mat.shape[-1]) - 1.0) * 1e9
     bias_mat = jnp.tile(bias_mat[..., None],
                         (1, 1, 1, self.nb_heads))     # [B, N, N, H]
     bias_mat = jnp.transpose(bias_mat, (0, 3, 1, 2))  # [B, H, N, N]
 
-    w_1 = hk.Linear(self.mid_size)
-    w_2 = hk.Linear(self.mid_size)
-    w_e = hk.Linear(self.mid_size)
-    w_g = hk.Linear(self.mid_size)
+    w_1 = hk.Linear(self.mid_size, name='Wp_1')
+    w_2 = hk.Linear(self.mid_size, name='Wp_2')
+    w_e = hk.Linear(self.mid_size, name='We')
+    w_g = hk.Linear(self.mid_size, name='Wg')
 
     a_heads = []
-    for _ in range(self.nb_heads):
-      a_heads.append(hk.Linear(1))
+    for ai in range(self.nb_heads):
+      a_heads.append(hk.Linear(1, name=f'a_{ai}'))
 
     values = m(z)                                      # [B, N, H*F]
     values = jnp.reshape(
@@ -242,8 +270,12 @@ class GATv2(Processor):
 
     pre_att_1 = w_1(z)
     pre_att_2 = w_2(z)
-    pre_att_e = w_e(edge_fts)
     pre_att_g = w_g(graph_fts)
+    pre_att_e = w_e(edge_fts)
+    print('p1', pre_att_1)
+    print('p2', pre_att_2)
+    print('pg', pre_att_g)
+    print('pe', pre_att_e)
 
     pre_att = (
         jnp.expand_dims(pre_att_1, axis=1) +     # + [B, 1, N, H*F]
@@ -258,6 +290,8 @@ class GATv2(Processor):
     )  # [B, N, N, H, F]
 
     pre_att = jnp.transpose(pre_att, (0, 3, 1, 2, 4))  # [B, H, N, N, F]
+    print('pre_att', pre_att.shape)
+    print(pre_att)
 
     # This part is not very efficient, but we agree to keep it this way to
     # enhance readability, assuming `nb_heads` will not be large.
@@ -270,11 +304,30 @@ class GATv2(Processor):
       )  # [B, N, N]
 
     logits = jnp.stack(logit_heads, axis=1)  # [B, H, N, N]
+    print('logits', logits.shape)
+    print(logits)
 
+    print('bias mx')
+    print(bias_mat)
     coefs = jax.nn.softmax(logits + bias_mat, axis=-1)
+    print('edge_fts', edge_fts.shape)
+    print(edge_fts)
+    print(edge_fts[:, :, :, 0])
+    print('coefs', coefs.shape)
+    print(coefs)
+    print(coefs * edge_fts[:, :, :, 0])
+    print(jnp.sum(coefs * edge_fts[:, :, :, 0], axis=-1))
+    print('values', values.shape)
+    print(values)
     ret = jnp.matmul(coefs, values)  # [B, H, N, F]
+    print('ret', ret.shape)
+    print(ret)
     ret = jnp.transpose(ret, (0, 2, 1, 3))  # [B, N, H, F]
+    print('retT', ret.shape)
+    print(ret)
     ret = jnp.reshape(ret, ret.shape[:-2] + (self.out_size,))  # [B, N, H*F]
+    print('retR', ret.shape, ret)
+    # exit()
 
     if self.residual:
       ret += skip(z)
@@ -285,6 +338,7 @@ class GATv2(Processor):
     if self.use_ln:
       ln = hk.LayerNorm(axis=-1, create_scale=True, create_offset=True)
       ret = ln(ret)
+
 
     return ret, None  # pytype: disable=bad-return-type  # numpy-scalars
 
