@@ -419,6 +419,8 @@ class Net(hk.Module):
     print(edge_fts)
 
     # PROCESS ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    print('Setting hidden to node_fts')
+    hidden = node_fts
     nxt_hidden = hidden
     for _ in range(self.nb_msg_passing_steps):
       nxt_hidden, nxt_edge = self.processor(
