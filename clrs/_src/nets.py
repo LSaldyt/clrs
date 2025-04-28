@@ -253,7 +253,7 @@ class Net(hk.Module):
       batch_size, nb_nodes = _data_dimensions(features)
 
       nb_mp_steps = max(1, hints[0].data.shape[0] - 1)
-      hiddens = jnp.zeros((batch_size, nb_nodes, self.hidden_dim))
+      hiddens = jnp.zeros((batch_size, nb_nodes, self.hidden_dim)) 
 
       if self.use_lstm:
         lstm_state = lstm_init(batch_size * nb_nodes)
@@ -361,21 +361,14 @@ class Net(hk.Module):
 
     return encoders_, decoders_
 
-  def _one_step_pred(
-      self,
+  def _create_fts(self,
       inputs: _Trajectory,
       hints: _Trajectory,
-      hidden: _Array,
       batch_size: int,
       nb_nodes: int,
-      lstm_state: Optional[hk.LSTMState],
-      spec: _Spec,
       encs: Dict[str, List[hk.Module]],
-      decs: Dict[str, Tuple[hk.Module]],
-      repred: bool,
-  ):
-    """Generates one-step predictions."""
-
+      skip_adj=False
+      ):
     # Initialise empty node/edge/graph features and adjacency matrix.
     node_fts = jnp.zeros((batch_size, nb_nodes, self.hidden_dim))
     edge_fts = jnp.zeros((batch_size, nb_nodes, nb_nodes, self.hidden_dim))
@@ -394,7 +387,8 @@ class Net(hk.Module):
         try:
           dp = encoders.preprocess(dp, nb_nodes)
           assert dp.type_ != _Type.SOFT_POINTER
-          adj_mat   = encoders.accum_adj_mat(dp, adj_mat)
+          if not skip_adj:
+              adj_mat = encoders.accum_adj_mat(dp, adj_mat)
           encoder   = encs[dp.name]
           edge_fts  = encoders.accum_edge_fts (encoder, dp, edge_fts)
           node_fts  = encoders.accum_node_fts (encoder, dp, node_fts)
@@ -411,16 +405,29 @@ class Net(hk.Module):
     # p is the id of the predecessor node
     # i is the id of the node itself
     node_fts = node_fts.at[:, start_index, 1] .set(1.0) # Set the starting node flag
-    node_fts = node_fts.at[:, :, 2]           .set(-1)  # Set initial predecessors to null
+    # node_fts = node_fts.at[:, :, 2]           .set(-1)  # Set initial predecessors to null # Might need to be changed to 0
     node_fts = node_fts.at[:, :, 3]           .set(jnp.arange(node_fts.shape[-1])) # Set the node ids
     print(node_fts)
-
-
     print(edge_fts)
+    return node_fts, edge_fts, graph_fts, adj_mat
+
+  def _one_step_pred(
+      self,
+      inputs: _Trajectory,
+      hints: _Trajectory,
+      hidden: _Array,
+      batch_size: int,
+      nb_nodes: int,
+      lstm_state: Optional[hk.LSTMState],
+      spec: _Spec,
+      encs: Dict[str, List[hk.Module]],
+      decs: Dict[str, Tuple[hk.Module]],
+      repred: bool,
+  ):
+    """Generates one-step predictions."""
+    node_fts, edge_fts, graph_fts, adj_mat = self._create_fts(inputs, hints, batch_size, nb_nodes, encs)
 
     # PROCESS ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    print('Setting hidden to node_fts')
-    hidden = node_fts
     nxt_hidden = hidden
     for _ in range(self.nb_msg_passing_steps):
       nxt_hidden, nxt_edge = self.processor(
@@ -666,7 +673,7 @@ class NetChunked(Net):
         mp_state.inputs = jax.tree_util.tree_map(lambda x: x[0], inputs)
         mp_state.hints = jax.tree_util.tree_map(lambda x: x[0], hints)
         mp_state.is_first = jnp.zeros(batch_size, dtype=int)
-        mp_state.hiddens = jnp.zeros((batch_size, nb_nodes, self.hidden_dim))
+        mp_state.hiddens = jnp.zeros((batch_size, nb_nodes, self.hidden_dim)) # HIDDEN
         next_is_first = jnp.ones(batch_size, dtype=int)
 
         mp_state, _ = self._msg_passing_step(

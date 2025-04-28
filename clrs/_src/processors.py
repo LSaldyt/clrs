@@ -242,13 +242,7 @@ class GATv2(Processor):
     m    = hk.Linear(self.out_size, name='value')
     skip = hk.Linear(self.out_size, name='skip')
 
-    # print('adj_mat')
-    # print(adj_mat)
-    # print(jnp.eye(adj_mat.shape[-1]))
-    # print(adj_mat - jnp.eye(adj_mat.shape[-1]))
-    # print(adj_mat - jnp.eye(adj_mat.shape[-1]) - 1)
-    
-    bias_mat = (adj_mat - jnp.eye(adj_mat.shape[-1]) - 1.0) * 1e9
+    bias_mat = (adj_mat - 1.0) * 1e9
     bias_mat = jnp.tile(bias_mat[..., None],
                         (1, 1, 1, self.nb_heads))     # [B, N, N, H]
     bias_mat = jnp.transpose(bias_mat, (0, 3, 1, 2))  # [B, H, N, N]
@@ -262,7 +256,11 @@ class GATv2(Processor):
     for ai in range(self.nb_heads):
       a_heads.append(hk.Linear(1, name=f'a_{ai}'))
 
+    print('z')
+    print(z)
     values = m(z)                                      # [B, N, H*F]
+    print('values', values.shape)
+    print(values)
     values = jnp.reshape(
         values,
         values.shape[:-1] + (self.nb_heads, self.head_size))  # [B, N, H, F]
@@ -327,7 +325,7 @@ class GATv2(Processor):
     print('ret', ret.shape)
     print(ret)
     print('updated values')
-    ret = ret.at[:, :, :, 0].set(edge_dists)
+    ret = ret.at[:, :, :, 0].set(ret[:, :, :, 0] + edge_dists)
     print(values)
     ret = jnp.transpose(ret, (0, 2, 1, 3))  # [B, N, H, F]
     print('retT', ret.shape)
