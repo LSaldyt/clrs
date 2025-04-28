@@ -242,11 +242,11 @@ class GATv2(Processor):
     m    = hk.Linear(self.out_size, name='value')
     skip = hk.Linear(self.out_size, name='skip')
 
-    print('adj_mat')
-    print(adj_mat)
-    print(jnp.eye(adj_mat.shape[-1]))
-    print(adj_mat - jnp.eye(adj_mat.shape[-1]))
-    print(adj_mat - jnp.eye(adj_mat.shape[-1]) - 1)
+    # print('adj_mat')
+    # print(adj_mat)
+    # print(jnp.eye(adj_mat.shape[-1]))
+    # print(adj_mat - jnp.eye(adj_mat.shape[-1]))
+    # print(adj_mat - jnp.eye(adj_mat.shape[-1]) - 1)
     
     bias_mat = (adj_mat - jnp.eye(adj_mat.shape[-1]) - 1.0) * 1e9
     bias_mat = jnp.tile(bias_mat[..., None],
@@ -292,6 +292,7 @@ class GATv2(Processor):
     pre_att = jnp.transpose(pre_att, (0, 3, 1, 2, 4))  # [B, H, N, N, F]
     print('pre_att', pre_att.shape)
     print(pre_att)
+    print(pre_att[:, :, :, :, 0])
 
     # This part is not very efficient, but we agree to keep it this way to
     # enhance readability, assuming `nb_heads` will not be large.
@@ -307,38 +308,51 @@ class GATv2(Processor):
     print('logits', logits.shape)
     print(logits)
 
-    print('bias mx')
-    print(bias_mat)
+    # print('bias mx')
+    # print(bias_mat)
     coefs = jax.nn.softmax(logits + bias_mat, axis=-1)
-    print('edge_fts', edge_fts.shape)
-    print(edge_fts)
+    # print('edge_fts', edge_fts.shape)
+    # print(edge_fts)
+    print('edge_fts slice')
     print(edge_fts[:, :, :, 0])
     print('coefs', coefs.shape)
     print(coefs)
     print(coefs * edge_fts[:, :, :, 0])
-    print(jnp.sum(coefs * edge_fts[:, :, :, 0], axis=-1))
+    edge_dists = jnp.sum(coefs * edge_fts[:, :, :, 0], axis=-1)
+    print('edge distances')
+    print(edge_dists)
     print('values', values.shape)
     print(values)
     ret = jnp.matmul(coefs, values)  # [B, H, N, F]
     print('ret', ret.shape)
     print(ret)
+    print('updated values')
+    ret = ret.at[:, :, :, 0].set(edge_dists)
+    print(values)
     ret = jnp.transpose(ret, (0, 2, 1, 3))  # [B, N, H, F]
     print('retT', ret.shape)
     print(ret)
     ret = jnp.reshape(ret, ret.shape[:-2] + (self.out_size,))  # [B, N, H*F]
-    print('retR', ret.shape, ret)
+    print('retR', ret.shape)
+    print(ret)
     # exit()
 
     if self.residual:
-      ret += skip(z)
+      skip_val = skip(z)
+      print('skip_val')
+      print(skip_val)
+      ret += skip_val
+    print('skip')
+    print(ret)
 
     if self.activation is not None:
       ret = self.activation(ret)
+    print('act')
+    print(ret)
 
     if self.use_ln:
       ln = hk.LayerNorm(axis=-1, create_scale=True, create_offset=True)
       ret = ln(ret)
-
 
     return ret, None  # pytype: disable=bad-return-type  # numpy-scalars
 
