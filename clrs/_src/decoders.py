@@ -255,22 +255,15 @@ def _decode_node_fts(decoders, t: str, h_t: _Array, edge_fts: _Array,
     p_1 = decoders[0](h_t)
     p_2 = decoders[1](h_t)
     p_3 = decoders[2](edge_fts)
-    print('p1')
-    print(p_1)
-    print('p2')
-    print(p_2)
-    print('p3')
-    print(p_3)
 
-    p_e = jnp.expand_dims(p_2, -2) + p_3
-    p_m = jnp.maximum(jnp.expand_dims(p_1, -2),
-                      jnp.transpose(p_e, (0, 2, 1, 3)))
-    print('p_e')
-    print(p_e)
-    print('p_m')
-    print(p_m)
-
-    preds = jnp.squeeze(decoders[3](p_m), -1)
+    simple_pointer_decoder = True
+    if simple_pointer_decoder: # Simplify decoding for neurally compiled models, where we don't need this edge information at all..
+        preds = -1000.0 * jnp.maximum(p_1, p_2)
+    else:
+        p_e = jnp.expand_dims(p_2, -2) + p_3
+        p_m = jnp.maximum(jnp.expand_dims(p_1, -2),
+                          jnp.transpose(p_e, (0, 2, 1, 3)))
+        preds = jnp.squeeze(decoders[3](p_m), -1)
 
     if inf_bias:
       per_batch_min = jnp.min(preds, axis=range(1, preds.ndim), keepdims=True)

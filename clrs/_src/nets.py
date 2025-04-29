@@ -396,19 +396,8 @@ class Net(hk.Module):
         except Exception as e:
           raise Exception(f'Failed to process {dp}') from e
 
-    print('Hardcoding node fts for bellman ford!!!')
-    start_inp   = [dp for dp in trajectories[0] if dp.name == 's'][0]
-    start_index = jnp.argmax(start_inp.data) # May need to account for batched mode by adding an axis here
-    node_fts = jnp.zeros_like(node_fts)
-    # Node structure:
-    # [d, s, p, i] where d is cumulative distance, s is starting node (or reached node) flag
-    # p is the id of the predecessor node
-    # i is the id of the node itself
-    node_fts = node_fts.at[:, start_index, 1] .set(1.0) # Set the starting node flag
-    # node_fts = node_fts.at[:, :, 2]           .set(-1)  # Set initial predecessors to null # Might need to be changed to 0
-    node_fts = node_fts.at[:, :, 3]           .set(jnp.arange(node_fts.shape[-1])) # Set the node ids
+    print('original node_fts')
     print(node_fts)
-    print(edge_fts)
     return node_fts, edge_fts, graph_fts, adj_mat
 
   def _one_step_pred(
