@@ -153,8 +153,11 @@ def postprocess(spec: _Spec, preds: Dict[str, _Array],
   result = {}
   for name in preds.keys():
     _, loc, t = spec[name]
+    # print(f'postprocessing {name} (loc={loc}, t={t}, hard={hard})')
     new_t = t
     data = preds[name]
+    # print(data.shape)
+    # print(data)
     if t == _Type.SCALAR:
       if hard:
         data = jax.lax.stop_gradient(data)
@@ -214,6 +217,7 @@ def decode_fts(
     decoder = decoders[name]
     stage, loc, t = spec[name]
 
+    print(name)
     if loc == _Location.NODE:
       preds = _decode_node_fts(decoder, t, h_t, edge_fts, adj_mat,
                                inf_bias, repred)
@@ -238,6 +242,10 @@ def decode_fts(
 def _decode_node_fts(decoders, t: str, h_t: _Array, edge_fts: _Array,
                      adj_mat: _Array, inf_bias: bool, repred: bool) -> _Array:
   """Decodes node features."""
+  from rich.pretty import pprint
+  pprint(decoders)
+  print(f'decoding node fts for {t}')
+  print(h_t)
 
   if t in [_Type.SCALAR, _Type.MASK, _Type.MASK_ONE]:
     preds = jnp.squeeze(decoders[0](h_t), -1)
@@ -247,10 +255,20 @@ def _decode_node_fts(decoders, t: str, h_t: _Array, edge_fts: _Array,
     p_1 = decoders[0](h_t)
     p_2 = decoders[1](h_t)
     p_3 = decoders[2](edge_fts)
+    print('p1')
+    print(p_1)
+    print('p2')
+    print(p_2)
+    print('p3')
+    print(p_3)
 
     p_e = jnp.expand_dims(p_2, -2) + p_3
     p_m = jnp.maximum(jnp.expand_dims(p_1, -2),
                       jnp.transpose(p_e, (0, 2, 1, 3)))
+    print('p_e')
+    print(p_e)
+    print('p_m')
+    print(p_m)
 
     preds = jnp.squeeze(decoders[3](p_m), -1)
 
@@ -270,6 +288,9 @@ def _decode_node_fts(decoders, t: str, h_t: _Array, edge_fts: _Array,
             zero_diagonal=True, noise_rng_key=hk.next_rng_key())
   else:
     raise ValueError("Invalid output type")
+
+  print('preds')
+  print(preds)
 
   return preds
 
