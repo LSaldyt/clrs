@@ -181,6 +181,7 @@ class GATv2(Processor):
       activation: Optional[_Fn] = jax.nn.relu,
       residual: bool = True,
       use_ln: bool = False,
+      use_edge_info: bool = True, # TODO: make sure this propagates from outer scope, and set False by default
       name: str = 'gatv2_aggr',
   ):
     super().__init__(name=name)
@@ -199,6 +200,7 @@ class GATv2(Processor):
     self.activation = activation
     self.residual = residual
     self.use_ln = use_ln
+    self.use_edge_info = use_edge_info
 
   def __call__(  # pytype: disable=signature-mismatch  # numpy-scalars
       self,
@@ -217,22 +219,22 @@ class GATv2(Processor):
     assert adj_mat.shape == (b, n, n)
 
     z = jnp.concatenate([node_fts, hidden], axis=-1)
-    m = hk.Linear(self.out_size)
-    skip = hk.Linear(self.out_size)
+    m = hk.Linear(self.out_size, name='value')
+    skip = hk.Linear(self.out_size, name='skip')
 
     bias_mat = (adj_mat - 1.0) * 1e9
     bias_mat = jnp.tile(bias_mat[..., None],
                         (1, 1, 1, self.nb_heads))     # [B, N, N, H]
     bias_mat = jnp.transpose(bias_mat, (0, 3, 1, 2))  # [B, H, N, N]
 
-    w_1 = hk.Linear(self.mid_size)
-    w_2 = hk.Linear(self.mid_size)
-    w_e = hk.Linear(self.mid_size)
-    w_g = hk.Linear(self.mid_size)
+    w_1 = hk.Linear(self.mid_size, name='Wp_1')
+    w_2 = hk.Linear(self.mid_size, name='Wp_2')
+    w_e = hk.Linear(self.mid_size, name='We')
+    w_g = hk.Linear(self.mid_size, name='Wg')
 
     a_heads = []
-    for _ in range(self.nb_heads):
-      a_heads.append(hk.Linear(1))
+    for ai in range(self.nb_heads):
+      a_heads.append(hk.Linear(1, name=f'a_{ai}'))
 
     values = m(z)                                      # [B, N, H*F]
     values = jnp.reshape(
@@ -273,6 +275,9 @@ class GATv2(Processor):
 
     coefs = jax.nn.softmax(logits + bias_mat, axis=-1)
     ret = jnp.matmul(coefs, values)  # [B, H, N, F]
+    if self.use_edge_info:
+        dists = jnp.sum(coefs * edge_fts[:, :, :, 0], axis=-1) # TODO: Generalize this to a second value layer
+        ret   = ret.at[:, :, :, 0].set(ret[:, :, :, 0] + dists)  # TODO: see above, generalize this step
     ret = jnp.transpose(ret, (0, 2, 1, 3))  # [B, N, H, F]
     ret = jnp.reshape(ret, ret.shape[:-2] + (self.out_size,))  # [B, N, H*F]
 

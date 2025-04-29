@@ -236,7 +236,9 @@ def decode_fts(
 
 
 def _decode_node_fts(decoders, t: str, h_t: _Array, edge_fts: _Array,
-                     adj_mat: _Array, inf_bias: bool, repred: bool) -> _Array:
+                     adj_mat: _Array, inf_bias: bool, repred: bool,
+                     simple_pointer_decoder: bool = True, # TODO: propagate from outer scope
+                     ) -> _Array:
   """Decodes node features."""
 
   if t in [_Type.SCALAR, _Type.MASK, _Type.MASK_ONE]:
@@ -248,11 +250,14 @@ def _decode_node_fts(decoders, t: str, h_t: _Array, edge_fts: _Array,
     p_2 = decoders[1](h_t)
     p_3 = decoders[2](edge_fts)
 
-    p_e = jnp.expand_dims(p_2, -2) + p_3
-    p_m = jnp.maximum(jnp.expand_dims(p_1, -2),
-                      jnp.transpose(p_e, (0, 2, 1, 3)))
+    if simple_pointer_decoder:
+        preds = -1000.0 * jnp.maximum(p_1, p_2) # TODO parameterize -1000.0, only create other decoder when simple is False
+    else:
+        p_e = jnp.expand_dims(p_2, -2) + p_3
+        p_m = jnp.maximum(jnp.expand_dims(p_1, -2),
+                          jnp.transpose(p_e, (0, 2, 1, 3)))
 
-    preds = jnp.squeeze(decoders[3](p_m), -1)
+        preds = jnp.squeeze(decoders[3](p_m), -1)
 
     if inf_bias:
       per_batch_min = jnp.min(preds, axis=range(1, preds.ndim), keepdims=True)
