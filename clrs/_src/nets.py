@@ -87,6 +87,7 @@ class Net(hk.Module):
       nb_msg_passing_steps=1,
       debug=False,
       name: str = 'net',
+      simplify_decoders=False,
   ):
     """Constructs a `Net`."""
     super().__init__(name=name)
@@ -104,6 +105,7 @@ class Net(hk.Module):
     self.encoder_init = encoder_init
     self.nb_msg_passing_steps = nb_msg_passing_steps
     self.debug = debug
+    self.simplify_decoders = simplify_decoders
 
   def _msg_passing_step(self,
                         mp_state: _MessagePassingScanState,
@@ -355,7 +357,8 @@ class Net(hk.Module):
           dec[name] = decoders.construct_decoders(
               loc, t, hidden_dim=self.hidden_dim,
               nb_dims=self.nb_dims[algo_idx][name],
-              name=f'algo_{algo_idx}_{name}')
+              name=f'algo_{algo_idx}_{name}',
+              simple_pointer_decoder=self.simplify_decoders)
       encoders_.append(enc)
       decoders_.append(dec)
 
@@ -443,6 +446,7 @@ class Net(hk.Module):
         inf_bias=self.processor.inf_bias,
         inf_bias_edge=self.processor.inf_bias_edge,
         repred=repred,
+        simple_pointer_decoder=self.simplify_decoders,
     )
 
     return nxt_hidden, output_preds, hint_preds, nxt_lstm_state

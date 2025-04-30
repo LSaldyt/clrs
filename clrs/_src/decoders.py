@@ -65,7 +65,7 @@ def log_sinkhorn(x: _Array, steps: int, temperature: float, zero_diagonal: bool,
 
 
 def construct_decoders(loc: str, t: str, hidden_dim: int, nb_dims: int,
-                       name: str, simple_pointer_decoder: bool = True): # TODO: propagate from outer scope
+                       name: str, simple_pointer_decoder: bool = True): 
   """Constructs decoders."""
   linear = functools.partial(hk.Linear, name=f"{name}_dec_linear")
   if loc == _Location.NODE:
@@ -208,6 +208,7 @@ def decode_fts(
     inf_bias: bool,
     inf_bias_edge: bool,
     repred: bool,
+    simple_pointer_decoder: bool = True, 
 ):
   """Decodes node, edge and graph features."""
   output_preds = {}
@@ -240,7 +241,7 @@ def decode_fts(
 
 def _decode_node_fts(decoders, t: str, h_t: _Array, edge_fts: _Array,
                      adj_mat: _Array, inf_bias: bool, repred: bool,
-                     simple_pointer_decoder: bool = True, # TODO: propagate from outer scope
+                     simple_pointer_decoder: bool = True, 
                      ) -> _Array:
   """Decodes node features."""
 
@@ -253,20 +254,7 @@ def _decode_node_fts(decoders, t: str, h_t: _Array, edge_fts: _Array,
     p_2 = decoders[1](h_t)
 
     if simple_pointer_decoder:
-        preds = -1000.0 * jnp.maximum(p_1, p_2) # TODO parameterize -1000.0, only create other decoder when simple is False
-        print('h_t', h_t.shape) # (b, n, f * t)
-        print(h_t)
-        print('p_1, p_2', p_1.shape, p_2.shape) # (b, n, f) each
-        print(p_1)
-        print(p_1)
-        print('preds', preds.shape) # (b, n, f) -> but needs to be (b, n, n)
-        print(preds)
-        # p_e = jnp.expand_dims(p_2, -2) + p_3
-        # p_m = jnp.maximum(jnp.expand_dims(p_1, -2),
-        #                   jnp.transpose(p_e, (0, 2, 1, 3)))
-
-        # alt_preds = jnp.squeeze(decoders[3](p_m), -1)
-        # print('alt_preds', alt_preds.shape)
+        preds = -1000.0 * jnp.maximum(p_1, p_2) # TODO parameterize -1000.0
     else:
         p_3 = decoders[2](edge_fts)
         p_e = jnp.expand_dims(p_2, -2) + p_3
