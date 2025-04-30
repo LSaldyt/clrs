@@ -65,7 +65,7 @@ def log_sinkhorn(x: _Array, steps: int, temperature: float, zero_diagonal: bool,
 
 
 def construct_decoders(loc: str, t: str, hidden_dim: int, nb_dims: int,
-                       name: str):
+                       name: str, simple_pointer_decoder: bool = True): # TODO: propagate from outer scope
   """Constructs decoders."""
   linear = functools.partial(hk.Linear, name=f"{name}_dec_linear")
   if loc == _Location.NODE:
@@ -75,8 +75,11 @@ def construct_decoders(loc: str, t: str, hidden_dim: int, nb_dims: int,
     elif t == _Type.CATEGORICAL:
       decoders = (linear(nb_dims),)
     elif t in [_Type.POINTER, _Type.PERMUTATION_POINTER]:
-      decoders = (linear(hidden_dim), linear(hidden_dim), linear(hidden_dim),
-                  linear(1))
+      if simple_pointer_decoder:
+        decoders = (linear(nb_dims), linear(nb_dims))
+      else:
+        decoders = (linear(hidden_dim), linear(hidden_dim), linear(hidden_dim),
+                    linear(1))
     else:
       raise ValueError(f"Invalid Type {t}")
 
@@ -248,11 +251,24 @@ def _decode_node_fts(decoders, t: str, h_t: _Array, edge_fts: _Array,
   elif t in [_Type.POINTER, _Type.PERMUTATION_POINTER]:
     p_1 = decoders[0](h_t)
     p_2 = decoders[1](h_t)
-    p_3 = decoders[2](edge_fts)
 
     if simple_pointer_decoder:
         preds = -1000.0 * jnp.maximum(p_1, p_2) # TODO parameterize -1000.0, only create other decoder when simple is False
+        print('h_t', h_t.shape) # (b, n, f * t)
+        print(h_t)
+        print('p_1, p_2', p_1.shape, p_2.shape) # (b, n, f) each
+        print(p_1)
+        print(p_1)
+        print('preds', preds.shape) # (b, n, f) -> but needs to be (b, n, n)
+        print(preds)
+        # p_e = jnp.expand_dims(p_2, -2) + p_3
+        # p_m = jnp.maximum(jnp.expand_dims(p_1, -2),
+        #                   jnp.transpose(p_e, (0, 2, 1, 3)))
+
+        # alt_preds = jnp.squeeze(decoders[3](p_m), -1)
+        # print('alt_preds', alt_preds.shape)
     else:
+        p_3 = decoders[2](edge_fts)
         p_e = jnp.expand_dims(p_2, -2) + p_3
         p_m = jnp.maximum(jnp.expand_dims(p_1, -2),
                           jnp.transpose(p_e, (0, 2, 1, 3)))
