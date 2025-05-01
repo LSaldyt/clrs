@@ -305,6 +305,8 @@ class GATv2(Processor):
     logits = jnp.stack(logit_heads, axis=1)  # [B, H, N, N]
     print('logits', logits.shape)
     print(logits)
+    print('logits + bias', logits.shape)
+    print(logits + bias_mat)
 
     # print('bias mx')
     # print(bias_mat)
