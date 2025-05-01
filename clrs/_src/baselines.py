@@ -763,7 +763,7 @@ def filter_null_grads(grads, opt, opt_state, opt_state_skeleton, algo_idx):
     opt_state: Optimizer state.
     opt_state_skeleton: A "skeleton" of optimizer state that has been
       initialized with scalar parameters. This serves to traverse each parameter
-      of the otpimizer state during the opt state update.
+      of the optimizer state during the opt state update.
     algo_idx: Index of algorithm, to filter out unused encoders/decoders.
       If None, no filtering happens.
   Returns:
