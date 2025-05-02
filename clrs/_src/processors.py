@@ -219,25 +219,8 @@ class GATv2(Processor):
     print('node_fts', node_fts.shape)
     print(node_fts)
 
-    # calc_edge_info = True
-    calc_edge_info = False
-    # edge_fts = jnp.ones_like(edge_fts)
 
-    if calc_edge_info:
-        # print('node', node_fts.shape)
-        # print('hid',  hidden.shape)
-        print('edge', edge_fts.shape)
-        print(edge_fts)
-        b, n, n, f = edge_fts.shape
-        z = jnp.concatenate([node_fts, hidden,
-                             edge_fts.reshape((b, n, n * f))
-                              ], axis=-1)
-        print('z', z.shape)
-        print(z)
-        # exit()
-
-    else:
-        z = jnp.concatenate([node_fts, hidden], axis=-1)
+    z = jnp.concatenate([node_fts, hidden], axis=-1)
     # print('z', z.shape, z)
     m    = hk.Linear(self.out_size, name='value')
     skip = hk.Linear(self.out_size, name='skip')
@@ -265,6 +248,14 @@ class GATv2(Processor):
         values,
         values.shape[:-1] + (self.nb_heads, self.head_size))  # [B, N, H, F]
     values = jnp.transpose(values, (0, 2, 1, 3))              # [B, H, N, F]
+    mask = jnp.minimum(values[:, :, :, 1], 1.0)
+    print('mask', mask.shape)
+    print(mask)
+    masked_edge_fts = jnp.einsum('bnmf,bhn->bnmf', edge_fts, mask)
+    edge_fts = masked_edge_fts
+    # masked_edge_fts = edge_fts * jnp.expand_dims(mask.T, 0)
+    print('masked edge fts')
+    print(masked_edge_fts)
 
     pre_att_1 = w_1(z)
     pre_att_2 = w_2(z)
@@ -275,12 +266,19 @@ class GATv2(Processor):
     print('pg', pre_att_g)
     print('pe', pre_att_e)
 
+    print('p1 + p2')
+    print(jnp.expand_dims(pre_att_1, axis=1) +     # + [B, 1, N, H*F]
+          jnp.expand_dims(pre_att_2, axis=2))
+
     pre_att = (
         jnp.expand_dims(pre_att_1, axis=1) +     # + [B, 1, N, H*F]
         jnp.expand_dims(pre_att_2, axis=2) +     # + [B, N, 1, H*F]
         pre_att_e +                              # + [B, N, N, H*F]
         jnp.expand_dims(pre_att_g, axis=(1, 2))  # + [B, 1, 1, H*F]
     )                                            # = [B, N, N, H*F]
+
+    print('pre_att', pre_att.shape)
+    print(pre_att)
 
     pre_att = jnp.reshape(
         pre_att,
@@ -335,7 +333,6 @@ class GATv2(Processor):
     ret = jnp.reshape(ret, ret.shape[:-2] + (self.out_size,))  # [B, N, H*F]
     print('retR', ret.shape)
     print(ret)
-    # exit()
 
     if self.residual:
       skip_val = skip(z)
