@@ -276,8 +276,10 @@ class GATv2(Processor):
     coefs = jax.nn.softmax(logits + bias_mat, axis=-1)
     ret = jnp.matmul(coefs, values)  # [B, H, N, F]
     if self.use_edge_info:
-        dists = jnp.sum(coefs * edge_fts[:, :, :, 0], axis=-1) # TODO: Generalize this to a second value layer
-        ret   = ret.at[:, :, :, 0].set(ret[:, :, :, 0] + dists)  # TODO: see above, generalize this step
+        edge_fts = jnp.expand_dims(edge_fts[:, :, :, 0], 1) # [B, H, N, N, F]
+        selected = (coefs * edge_fts) 
+        dists    = jnp.sum(selected, axis=-1)                      # TODO: Generalize this to a second value layer
+        ret      = ret.at[:, :, :, 0].set(ret[:, :, :, 0] + dists) # TODO: see above, generalize this step
     ret = jnp.transpose(ret, (0, 2, 1, 3))  # [B, N, H, F]
     ret = jnp.reshape(ret, ret.shape[:-2] + (self.out_size,))  # [B, N, H*F]
 
