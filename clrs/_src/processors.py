@@ -201,6 +201,7 @@ class GATv2(Processor):
     self.residual = residual
     self.use_ln = use_ln
     self.use_edge_info = use_edge_info
+    self.print_debug = True # I have never learned my lesson :)
 
   def __call__(  # pytype: disable=signature-mismatch  # numpy-scalars
       self,
@@ -219,7 +220,11 @@ class GATv2(Processor):
     assert adj_mat.shape == (b, n, n)
 
     z = jnp.concatenate([node_fts, hidden], axis=-1)
-    m = hk.Linear(self.out_size, name='value')
+    if self.print_debug:
+        print('z', z.shape)
+        print(z)
+
+    m    = hk.Linear(self.out_size, name='value')
     skip = hk.Linear(self.out_size, name='skip')
 
     bias_mat = (adj_mat - 1.0) * 1e9
@@ -242,17 +247,38 @@ class GATv2(Processor):
         values.shape[:-1] + (self.nb_heads, self.head_size))  # [B, N, H, F]
     values = jnp.transpose(values, (0, 2, 1, 3))              # [B, H, N, F]
 
+    if self.print_debug:
+        print('values', values.shape)
+        print(values)
+
     pre_att_1 = w_1(z)
     pre_att_2 = w_2(z)
     pre_att_e = w_e(edge_fts)
     pre_att_g = w_g(graph_fts)
+    if self.print_debug:
+        print('pg', pre_att_g.shape)
+        print(pre_att_g)
+        print('p1', pre_att_1.shape)
+        print(pre_att_1)
+        print('p2', pre_att_2.shape)
+        print(pre_att_2)
+        print('pe', pre_att_e.shape)
+        print(pre_att_e)
+
+    # NEW!
+    pre_att_bias   = hk.Bias(name='pre_att_bias')
+    pre_att_bias_v = pre_att_bias(jnp.zeros((b, n, n)))
+    if self.print_debug:
+        print('pre_att_bias_v', pre_att_bias_v.shape)
+        print(pre_att_bias_v)
 
     pre_att = (
-        jnp.expand_dims(pre_att_1, axis=1) +     # + [B, 1, N, H*F]
-        jnp.expand_dims(pre_att_2, axis=2) +     # + [B, N, 1, H*F]
-        pre_att_e +                              # + [B, N, N, H*F]
-        jnp.expand_dims(pre_att_g, axis=(1, 2))  # + [B, 1, 1, H*F]
-    )                                            # = [B, N, N, H*F]
+        jnp.expand_dims(pre_att_1, axis=1) +         # + [B, 1, N, H*F]
+        jnp.expand_dims(pre_att_2, axis=2) +         # + [B, N, 1, H*F]
+        jnp.expand_dims(pre_att_bias_v, axis=-1)  +  # + [1, N, N, 1]
+        pre_att_e +                                  # + [B, N, N, H*F]
+        jnp.expand_dims(pre_att_g, axis=(1, 2))      # + [B, 1, 1, H*F]
+    )                                                # = [B, N, N, H*F]
 
     pre_att = jnp.reshape(
         pre_att,
@@ -260,6 +286,9 @@ class GATv2(Processor):
     )  # [B, N, N, H, F]
 
     pre_att = jnp.transpose(pre_att, (0, 3, 1, 2, 4))  # [B, H, N, N, F]
+    if self.print_debug:
+        print('pre_att', pre_att.shape)
+        print(pre_att)
 
     # This part is not very efficient, but we agree to keep it this way to
     # enhance readability, assuming `nb_heads` will not be large.
@@ -272,10 +301,21 @@ class GATv2(Processor):
       )  # [B, N, N]
 
     logits = jnp.stack(logit_heads, axis=1)  # [B, H, N, N]
+    if self.print_debug:
+        print('logits', logits.shape)
+        print(logits)
+        print('logits + B', logits.shape)
+        print(logits + bias_mat)
 
     coefs = jax.nn.softmax(logits + bias_mat, axis=-1)
+    if self.print_debug:
+        print('coefs', coefs.shape)
+        print(coefs)
+
     ret = jnp.matmul(coefs, values)  # [B, H, N, F]
     if self.use_edge_info:
+        if self.print_debug:
+            print('USING EDGE INFO')
         edge_fts = jnp.expand_dims(edge_fts[:, :, :, 0], 1) # [B, H, N, N, F]
         selected = (coefs * edge_fts) 
         dists    = jnp.sum(selected, axis=-1)                      # TODO: Generalize this to a second value layer
@@ -283,8 +323,16 @@ class GATv2(Processor):
     ret = jnp.transpose(ret, (0, 2, 1, 3))  # [B, N, H, F]
     ret = jnp.reshape(ret, ret.shape[:-2] + (self.out_size,))  # [B, N, H*F]
 
+    if self.print_debug:
+        print('ret', ret.shape)
+        print(ret)
+
     if self.residual:
       ret += skip(z)
+
+    if self.print_debug:
+        print('skip', ret.shape)
+        print(ret)
 
     if self.activation is not None:
       ret = self.activation(ret)
@@ -754,50 +802,57 @@ def get_processor_factory(kind: str,
     A callable that takes an `out_size` parameter (equal to the hidden
     dimension of the network) and returns a processor instance.
   """
-  def _factory(out_size: int):
+  def _factory(out_size: int, **kwargs):
     if kind == 'deepsets':
       processor = DeepSets(
           out_size=out_size,
           msgs_mlp_sizes=[out_size, out_size],
           use_ln=use_ln,
           use_triplets=False,
-          nb_triplet_fts=0
+          nb_triplet_fts=0,
+          **kwargs
       )
     elif kind == 'gat':
       processor = GAT(
           out_size=out_size,
           nb_heads=nb_heads,
           use_ln=use_ln,
+          **kwargs
       )
     elif kind == 'gat_full':
       processor = GATFull(
           out_size=out_size,
           nb_heads=nb_heads,
-          use_ln=use_ln
+          use_ln=use_ln,
+          **kwargs
       )
     elif kind == 'gatv2':
       processor = GATv2(
           out_size=out_size,
           nb_heads=nb_heads,
-          use_ln=use_ln
+          use_ln=use_ln,
+          **kwargs
       )
     elif kind == 'gatv2_full':
       processor = GATv2Full(
           out_size=out_size,
           nb_heads=nb_heads,
-          use_ln=use_ln
+          use_ln=use_ln,
+          **kwargs
       )
     elif kind == 'memnet_full':
       processor = MemNetFull(
           vocab_size=out_size,
           sentence_size=out_size,
           linear_output_size=out_size,
+          **kwargs
       )
     elif kind == 'memnet_masked':
       processor = MemNetMasked(
           vocab_size=out_size,
           sentence_size=out_size,
           linear_output_size=out_size,
+          **kwargs
       )
     elif kind == 'mpnn':
       processor = MPNN(
@@ -806,6 +861,7 @@ def get_processor_factory(kind: str,
           use_ln=use_ln,
           use_triplets=False,
           nb_triplet_fts=0,
+          **kwargs
       )
     elif kind == 'pgn':
       processor = PGN(
@@ -814,6 +870,7 @@ def get_processor_factory(kind: str,
           use_ln=use_ln,
           use_triplets=False,
           nb_triplet_fts=0,
+          **kwargs
       )
     elif kind == 'pgn_mask':
       processor = PGNMask(
@@ -822,6 +879,7 @@ def get_processor_factory(kind: str,
           use_ln=use_ln,
           use_triplets=False,
           nb_triplet_fts=0,
+          **kwargs
       )
     elif kind == 'triplet_mpnn':
       processor = MPNN(
@@ -830,6 +888,7 @@ def get_processor_factory(kind: str,
           use_ln=use_ln,
           use_triplets=True,
           nb_triplet_fts=nb_triplet_fts,
+          **kwargs
       )
     elif kind == 'triplet_pgn':
       processor = PGN(
@@ -838,6 +897,7 @@ def get_processor_factory(kind: str,
           use_ln=use_ln,
           use_triplets=True,
           nb_triplet_fts=nb_triplet_fts,
+          **kwargs
       )
     elif kind == 'triplet_pgn_mask':
       processor = PGNMask(
@@ -846,6 +906,7 @@ def get_processor_factory(kind: str,
           use_ln=use_ln,
           use_triplets=True,
           nb_triplet_fts=nb_triplet_fts,
+          **kwargs
       )
     elif kind == 'gpgn':
       processor = PGN(
@@ -855,6 +916,7 @@ def get_processor_factory(kind: str,
           use_triplets=False,
           nb_triplet_fts=nb_triplet_fts,
           gated=True,
+          **kwargs
       )
     elif kind == 'gpgn_mask':
       processor = PGNMask(
@@ -864,6 +926,7 @@ def get_processor_factory(kind: str,
           use_triplets=False,
           nb_triplet_fts=nb_triplet_fts,
           gated=True,
+          **kwargs
       )
     elif kind == 'gmpnn':
       processor = MPNN(
@@ -873,6 +936,7 @@ def get_processor_factory(kind: str,
           use_triplets=False,
           nb_triplet_fts=nb_triplet_fts,
           gated=True,
+          **kwargs
       )
     elif kind == 'triplet_gpgn':
       processor = PGN(
@@ -882,6 +946,7 @@ def get_processor_factory(kind: str,
           use_triplets=True,
           nb_triplet_fts=nb_triplet_fts,
           gated=True,
+          **kwargs
       )
     elif kind == 'triplet_gpgn_mask':
       processor = PGNMask(
@@ -891,6 +956,7 @@ def get_processor_factory(kind: str,
           use_triplets=True,
           nb_triplet_fts=nb_triplet_fts,
           gated=True,
+          **kwargs
       )
     elif kind == 'triplet_gmpnn':
       processor = MPNN(
@@ -900,6 +966,7 @@ def get_processor_factory(kind: str,
           use_triplets=True,
           nb_triplet_fts=nb_triplet_fts,
           gated=True,
+          **kwargs
       )
     else:
       raise ValueError('Unexpected processor kind ' + kind)

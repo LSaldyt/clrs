@@ -157,6 +157,7 @@ class BaselineModel(model.Model):
       nb_msg_passing_steps: int = 1,
       debug: bool = False,
       simplify_decoders: bool = False,
+      use_edge_info: bool = False,
   ):
     """Constructor for BaselineModel.
 
@@ -228,6 +229,7 @@ class BaselineModel(model.Model):
     self.nb_msg_passing_steps = nb_msg_passing_steps
     self.debug = debug
     self.simplify_decoders = simplify_decoders
+    self.use_edge_info = use_edge_info
 
     self.nb_dims = []
     if isinstance(dummy_trajectory, _Feedback):
@@ -259,7 +261,8 @@ class BaselineModel(model.Model):
                       dropout_prob, hint_teacher_forcing,
                       hint_repred_mode,
                       self.nb_dims, self.nb_msg_passing_steps,
-                      self.debug, simplify_decoders=self.simplify_decoders)(*args, **kwargs)
+                      self.debug, simplify_decoders=self.simplify_decoders,
+                      use_edge_info=self.use_edge_info)(*args, **kwargs)
 
     self.net_fn = hk.transform(_use_net)
     pmap_args = dict(axis_name='batch', devices=jax.local_devices())

@@ -220,7 +220,7 @@ def decode_fts(
 
     if loc == _Location.NODE:
       preds = _decode_node_fts(decoder, t, h_t, edge_fts, adj_mat,
-                               inf_bias, repred)
+                               inf_bias, repred, simple_pointer_decoder=simple_pointer_decoder)
     elif loc == _Location.EDGE:
       preds = _decode_edge_fts(decoder, t, h_t, edge_fts, adj_mat,
                                inf_bias_edge)
@@ -255,6 +255,7 @@ def _decode_node_fts(decoders, t: str, h_t: _Array, edge_fts: _Array,
 
     if simple_pointer_decoder:
         preds = -1000.0 * jnp.maximum(p_1, p_2) # TODO parameterize -1000.0
+        # raise NotImplementedError('Simplified pointer decoding causes issue with length generalization')
     else:
         p_3 = decoders[2](edge_fts)
         p_e = jnp.expand_dims(p_2, -2) + p_3
