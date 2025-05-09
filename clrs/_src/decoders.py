@@ -218,6 +218,8 @@ def decode_fts(
     decoder = decoders[name]
     stage, loc, t = spec[name]
 
+    # print('decoding', name, loc, t)
+
     if loc == _Location.NODE:
       preds = _decode_node_fts(decoder, t, h_t, edge_fts, adj_mat,
                                inf_bias, repred, simple_pointer_decoder=simple_pointer_decoder)
@@ -244,6 +246,8 @@ def _decode_node_fts(decoders, t: str, h_t: _Array, edge_fts: _Array,
                      simple_pointer_decoder: bool = True, 
                      ) -> _Array:
   """Decodes node features."""
+  # print('h_t')
+  # print(h_t)
 
   if t in [_Type.SCALAR, _Type.MASK, _Type.MASK_ONE]:
     preds = jnp.squeeze(decoders[0](h_t), -1)
@@ -254,7 +258,11 @@ def _decode_node_fts(decoders, t: str, h_t: _Array, edge_fts: _Array,
     p_2 = decoders[1](h_t)
 
     if simple_pointer_decoder:
+        # print('(simplified pointer decoder)')
         preds = -1000.0 * jnp.maximum(p_1, p_2) # TODO parameterize -1000.0
+        # print('preds', preds.shape)
+        # print(preds)
+        # print(jax.nn.softmax(preds, axis=0))
         # raise NotImplementedError('Simplified pointer decoding causes issue with length generalization')
     else:
         p_3 = decoders[2](edge_fts)
