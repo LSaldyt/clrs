@@ -181,7 +181,8 @@ class GATv2(Processor):
       activation: Optional[_Fn] = jax.nn.relu,
       residual: bool = True,
       use_ln: bool = False,
-      use_edge_info: bool = True, # TODO: make sure this propagates from outer scope, and set False by default
+      use_edge_info: bool = True, 
+      use_pre_att_bias: bool = True,
       name: str = 'gatv2_aggr',
   ):
     super().__init__(name=name)
@@ -201,7 +202,9 @@ class GATv2(Processor):
     self.residual = residual
     self.use_ln = use_ln
     self.use_edge_info = use_edge_info
-    self.print_debug = True # I have never learned my lesson :)
+    self.use_pre_att_bias = use_pre_att_bias
+    # self.print_debug = True # I have never learned my lesson :)
+    self.print_debug = False # I have never learned my lesson :)
 
   def __call__(  # pytype: disable=signature-mismatch  # numpy-scalars
       self,
@@ -266,19 +269,27 @@ class GATv2(Processor):
         print(pre_att_e)
 
     # NEW!
-    pre_att_bias   = hk.Bias(name='pre_att_bias')
-    pre_att_bias_v = pre_att_bias(jnp.zeros((b, n, n)))
-    if self.print_debug:
-        print('pre_att_bias_v', pre_att_bias_v.shape)
-        print(pre_att_bias_v)
+    if self.use_pre_att_bias:
+        pre_att_bias   = hk.Bias(name='pre_att_bias')
+        pre_att_bias_v = pre_att_bias(jnp.zeros((b, n, n)))
+        if self.print_debug:
+            print('pre_att_bias_v', pre_att_bias_v.shape)
+            print(pre_att_bias_v)
 
-    pre_att = (
-        jnp.expand_dims(pre_att_1, axis=1) +         # + [B, 1, N, H*F]
-        jnp.expand_dims(pre_att_2, axis=2) +         # + [B, N, 1, H*F]
-        jnp.expand_dims(pre_att_bias_v, axis=-1)  +  # + [1, N, N, 1]
-        pre_att_e +                                  # + [B, N, N, H*F]
-        jnp.expand_dims(pre_att_g, axis=(1, 2))      # + [B, 1, 1, H*F]
-    )                                                # = [B, N, N, H*F]
+        pre_att = (
+            jnp.expand_dims(pre_att_1, axis=1) +         # + [B, 1, N, H*F]
+            jnp.expand_dims(pre_att_2, axis=2) +         # + [B, N, 1, H*F]
+            jnp.expand_dims(pre_att_bias_v, axis=-1)  +  # + [1, N, N, 1]
+            pre_att_e +                                  # + [B, N, N, H*F]
+            jnp.expand_dims(pre_att_g, axis=(1, 2))      # + [B, 1, 1, H*F]
+        )                                                # = [B, N, N, H*F]
+    else:
+        pre_att = (
+            jnp.expand_dims(pre_att_1, axis=1) +         # + [B, 1, N, H*F]
+            jnp.expand_dims(pre_att_2, axis=2) +         # + [B, N, 1, H*F]
+            pre_att_e +                                  # + [B, N, N, H*F]
+            jnp.expand_dims(pre_att_g, axis=(1, 2))      # + [B, 1, 1, H*F]
+        )                                                # = [B, N, N, H*F]
 
     pre_att = jnp.reshape(
         pre_att,

@@ -88,7 +88,8 @@ class Net(hk.Module):
       debug=False,
       name: str = 'net',
       simplify_decoders=False,
-      use_edge_info=False
+      use_edge_info=False,
+      use_pre_att_bias=False
   ):
     """Constructs a `Net`."""
     super().__init__(name=name)
@@ -108,6 +109,7 @@ class Net(hk.Module):
     self.debug = debug
     self.simplify_decoders = simplify_decoders
     self.use_edge_info     = use_edge_info
+    self.use_pre_att_bias  = use_pre_att_bias
 
   def _msg_passing_step(self,
                         mp_state: _MessagePassingScanState,
@@ -239,7 +241,7 @@ class Net(hk.Module):
     self.encoders, self.decoders = self._construct_encoders_decoders()
     # self.processor = self.processor_factory(self.hidden_dim)
     # Is this the best way to get arbitrary kwargs to the models themselves? Why is it so indirect?
-    self.processor = self.processor_factory(self.hidden_dim, use_edge_info=self.use_edge_info)
+    self.processor = self.processor_factory(self.hidden_dim, use_edge_info=self.use_edge_info, use_pre_att_bias=self.use_pre_att_bias)
 
     # Optionally construct LSTM.
     if self.use_lstm:
@@ -629,7 +631,7 @@ class NetChunked(Net):
 
     self.encoders, self.decoders = self._construct_encoders_decoders()
     # self.processor = self.processor_factory(self.hidden_dim)
-    self.processor = self.processor_factory(self.hidden_dim, use_edge_info=self.use_edge_info)
+    self.processor = self.processor_factory(self.hidden_dim, use_edge_info=self.use_edge_info, use_pre_att_bias=self.use_pre_att_bias)
     # Optionally construct LSTM.
     if self.use_lstm:
       self.lstm = hk.LSTM(
