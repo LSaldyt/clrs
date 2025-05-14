@@ -159,6 +159,8 @@ class BaselineModel(model.Model):
       simplify_decoders: bool = False,
       use_edge_info: bool = False,
       use_pre_att_bias: bool = False,
+      regularization: bool = False,
+      regularization_weight: float = 1e-4, # vibes based
   ):
     """Constructor for BaselineModel.
 
@@ -232,6 +234,8 @@ class BaselineModel(model.Model):
     self.simplify_decoders = simplify_decoders
     self.use_edge_info = use_edge_info
     self.use_pre_att_bias = use_pre_att_bias
+    self.regularization        = regularization
+    self.regularization_weight = regularization_weight
 
     self.nb_dims = []
     if isinstance(dummy_trajectory, _Feedback):
@@ -445,6 +449,11 @@ class BaselineModel(model.Model):
             lengths=lengths,
             nb_nodes=nb_nodes,
         )
+
+    if self.regularization:
+      for k, v in params.items():
+          for sk, sv in v.items():
+              total_loss += self.regularization_weight * jnp.sum(jnp.abs(sv))
 
     return total_loss
 
