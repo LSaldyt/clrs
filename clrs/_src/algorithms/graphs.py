@@ -173,6 +173,91 @@ def dfs(A: _Array) -> _Out:
 
   return pi, probes
 
+def dfs_light(A: _Array) -> _Out:
+  """Depth-first search (Moore, 1959)."""
+
+  chex.assert_rank(A, 2)
+  probes = probing.initialize(specs.SPECS['dfs_light'])
+
+  A_pos = np.arange(A.shape[0])
+
+  probing.push(
+      probes,
+      specs.Stage.INPUT,
+      next_probe={
+          'pos': np.copy(A_pos) * 1.0 / A.shape[0],
+          'A': np.copy(A),
+          'adj': probing.graph(np.copy(A))
+      })
+
+  color = np.zeros(A.shape[0], dtype=np.int32)
+  pi = np.arange(A.shape[0])
+  s_prev = np.arange(A.shape[0])
+  for s in range(A.shape[0]):
+    if color[s] == 0:
+      s_last = s
+      u = s
+      v = s
+      probing.push(
+          probes,
+          specs.Stage.HINT,
+          next_probe={
+              'pi_h': np.copy(pi),
+              'color': probing.array_cat(color, 3),
+          })
+      while True:
+        if color[u] == 0:
+          color[u] = 1
+          probing.push(
+              probes,
+              specs.Stage.HINT,
+              next_probe={
+                  'pi_h': np.copy(pi),
+                  'color': probing.array_cat(color, 3),
+              })
+
+        for v in range(A.shape[0]):
+          if A[u, v] != 0:
+            if color[v] == 0:
+              pi[v] = u
+              color[v] = 1
+              s_prev[v] = s_last
+              s_last = v
+
+              probing.push(
+                  probes,
+                  specs.Stage.HINT,
+                  next_probe={
+                      'pi_h': np.copy(pi),
+                      'color': probing.array_cat(color, 3),
+                  })
+              break
+
+        if s_last == u:
+          color[u] = 2
+
+          probing.push(
+              probes,
+              specs.Stage.HINT,
+              next_probe={
+                  'pi_h': np.copy(pi),
+                  'color': probing.array_cat(color, 3),
+              })
+
+          if s_prev[u] == u:
+            assert s_prev[s_last] == s_last
+            break
+          pr = s_prev[s_last]
+          s_prev[s_last] = s_last
+          s_last = pr
+
+        u = s_last
+
+  probing.push(probes, specs.Stage.OUTPUT, next_probe={'pi': np.copy(pi)})
+  probing.finalize(probes)
+
+  return pi, probes
+
 
 def bfs(A: _Array, s: int) -> _Out:
   """Breadth-first search (Moore, 1959)."""
@@ -210,6 +295,60 @@ def bfs(A: _Array, s: int) -> _Out:
           if pi[j] == j and j != s:
             pi[j] = i
           reach[j] = 1
+    if np.all(reach == prev_reach):
+      break
+
+  probing.push(probes, specs.Stage.OUTPUT, next_probe={'pi': np.copy(pi)})
+  probing.finalize(probes)
+
+  return pi, probes
+
+def bfs_seq(A: _Array, s: int) -> _Out:
+  """Breadth-first search (Moore, 1959)."""
+  # This version of BFS has been intentionally made inherently sequential
+  chex.assert_rank(A, 2)
+  probes = probing.initialize(specs.SPECS['bfs_seq'])
+
+  A_pos = np.arange(A.shape[0])
+
+  probing.push(
+      probes,
+      specs.Stage.INPUT,
+      next_probe={
+          'pos': np.copy(A_pos) * 1.0 / A.shape[0],
+          's': probing.mask_one(s, A.shape[0]),
+          'A': np.copy(A),
+          'adj': probing.graph(np.copy(A))
+      })
+
+  reach = np.zeros(A.shape[0])
+  pi = np.arange(A.shape[0])
+  reach[s] = 1
+  fresh = True
+  while True:
+    prev_reach = np.copy(reach)
+    if fresh:
+      probing.push(
+          probes,
+          specs.Stage.HINT,
+          next_probe={
+              'reach_h': np.copy(prev_reach),
+              'pi_h': np.copy(pi)
+          })
+      fresh = False
+    for i in range(A.shape[0]):
+      for j in range(A.shape[0]):
+        if A[i, j] > 0 and prev_reach[i] == 1:
+          if pi[j] == j and j != s:
+            pi[j] = i
+          reach[j] = 1
+          probing.push(
+              probes,
+              specs.Stage.HINT,
+              next_probe={
+                  'reach_h': np.copy(prev_reach),
+                  'pi_h': np.copy(pi)
+              })
     if np.all(reach == prev_reach):
       break
 

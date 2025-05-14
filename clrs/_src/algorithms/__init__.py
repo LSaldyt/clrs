@@ -29,7 +29,9 @@ from clrs._src.algorithms.geometry import graham_scan
 from clrs._src.algorithms.geometry import jarvis_march
 
 from clrs._src.algorithms.graphs import dfs
+from clrs._src.algorithms.graphs import dfs_light
 from clrs._src.algorithms.graphs import bfs
+from clrs._src.algorithms.graphs import bfs_seq
 from clrs._src.algorithms.graphs import topological_sort
 from clrs._src.algorithms.graphs import articulation_points
 from clrs._src.algorithms.graphs import bridges
