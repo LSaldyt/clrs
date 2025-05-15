@@ -346,9 +346,9 @@ class BaselineModel(model.Model):
         return_hints=return_hints,
         return_all_outputs=return_all_outputs)
     if self.debug:
-      outs, hint_preds, hidden_states = net_outputs
+      outs, hint_preds, hidden_states, aux = net_outputs
     else:
-      outs, hint_preds = net_outputs
+      outs, hint_preds, aux = net_outputs
     outs = decoders.postprocess(self._spec[algorithm_index],
                                 outs,
                                 sinkhorn_temperature=0.1,
@@ -356,9 +356,9 @@ class BaselineModel(model.Model):
                                 hard=True,
                                 )
     if self.debug:
-      return outs, hint_preds, hidden_states
+      return outs, hint_preds, hidden_states, aux
     else:
-      return outs, hint_preds
+      return outs, hint_preds, aux
 
   def compute_grad(
       self,
@@ -424,9 +424,9 @@ class BaselineModel(model.Model):
         return_hints=True,
         return_all_outputs=False)
     if self.debug:
-      output_preds, hint_preds, _ = outputs
+      output_preds, hint_preds, _, _ = outputs
     else:
-      output_preds, hint_preds = outputs
+      output_preds, hint_preds, _ = outputs
 
     nb_nodes = _nb_nodes(feedback, is_chunked=False)
     lengths = feedback.features.lengths

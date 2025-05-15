@@ -50,13 +50,12 @@ class _MessagePassingScanState:
   output_preds: chex.Array
   hiddens: chex.Array
   lstm_state: Optional[hk.LSTMState]
-
+  aux: Dict[str, chex.Array]
 
 @chex.dataclass
 class _MessagePassingOutputChunked:
   hint_preds: chex.Array
   output_preds: chex.Array
-
 
 @chex.dataclass
 class MessagePassingStateChunked:
@@ -170,7 +169,7 @@ class Net(hk.Module):
             probing.DataPoint(
                 name=hint.name, location=loc, type_=typ, data=hint_data))
 
-    hiddens, output_preds_cand, hint_preds, lstm_state = self._one_step_pred(
+    hiddens, output_preds_cand, hint_preds, lstm_state, aux = self._one_step_pred(
         inputs, cur_hint, mp_state.hiddens,
         batch_size, nb_nodes, mp_state.lstm_state,
         spec, encs, decs, repred)
@@ -189,12 +188,13 @@ class Net(hk.Module):
         hint_preds=hint_preds,
         output_preds=output_preds,
         hiddens=hiddens,
-        lstm_state=lstm_state)
+        lstm_state=lstm_state,
+        aux=aux)
     # Save memory by not stacking unnecessary fields
     accum_mp_state = _MessagePassingScanState(  # pytype: disable=wrong-arg-types  # numpy-scalars
         hint_preds=hint_preds if return_hints else None,
         output_preds=output_preds if return_all_outputs else None,
-        hiddens=hiddens if self.debug else None, lstm_state=None)
+        hiddens=hiddens if self.debug else None, lstm_state=None, aux=aux)
 
     # Complying to jax.scan, the first returned value is the state we carry over
     # the second value is the output that will be stacked over steps.
@@ -273,7 +273,7 @@ class Net(hk.Module):
 
       mp_state = _MessagePassingScanState(  # pytype: disable=wrong-arg-types  # numpy-scalars
           hint_preds=None, output_preds=None,
-          hiddens=hiddens, lstm_state=lstm_state)
+          hiddens=hiddens, lstm_state=lstm_state, aux=None)
 
       # Do the first step outside of the scan because it has a different
       # computation graph.
@@ -330,9 +330,9 @@ class Net(hk.Module):
 
     if self.debug:
       hiddens = jnp.stack([v for v in accum_mp_state.hiddens])
-      return output_preds, hint_preds, hiddens
+      return output_preds, hint_preds, hiddens, accum_mp_state.aux
 
-    return output_preds, hint_preds
+    return output_preds, hint_preds, accum_mp_state.aux
 
   def _construct_encoders_decoders(self):
     """Constructs encoders and decoders, separate for each algorithm."""
@@ -414,7 +414,7 @@ class Net(hk.Module):
     # PROCESS ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     nxt_hidden = hidden
     for _ in range(self.nb_msg_passing_steps):
-      nxt_hidden, nxt_edge = self.processor(
+      nxt_hidden, nxt_edge, nxt_aux = self.processor(
           node_fts,
           edge_fts,
           graph_fts,
@@ -455,7 +455,7 @@ class Net(hk.Module):
         simple_pointer_decoder=self.simplify_decoders,
     )
 
-    return nxt_hidden, output_preds, hint_preds, nxt_lstm_state
+    return nxt_hidden, output_preds, hint_preds, nxt_lstm_state, nxt_aux
 
 
 class NetChunked(Net):
@@ -555,7 +555,7 @@ class NetChunked(Net):
           mp_state.lstm_state)
     else:
       lstm_state = None
-    hiddens, output_preds, hint_preds, lstm_state = self._one_step_pred(
+    hiddens, output_preds, hint_preds, lstm_state, aux = self._one_step_pred(
         inputs, hints_for_pred, hiddens,
         batch_size, nb_nodes, lstm_state,
         spec, encs, decs, repred)
