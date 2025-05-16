@@ -327,10 +327,38 @@ class GATv2(Processor):
     if self.use_edge_info:
         if self.print_debug:
             print('USING EDGE INFO')
-        edge_fts = jnp.expand_dims(edge_fts[:, :, :, 0], 1) # [B, H, N, N, F]
-        selected = (coefs * edge_fts) 
-        dists    = jnp.sum(selected, axis=-1)                      # TODO: Generalize this to a second value layer
-        ret      = ret.at[:, :, :, 0].set(ret[:, :, :, 0] + dists) # TODO: see above, generalize this step
+        # To generalize this, we need to not arbitrarily select the first feature
+        # edge_fts is a                             (b, h, n, n, f)
+        # then we multiply it by the coefs, keeping (b, h, n, n, f)
+        # rather than summing only the final feature, we just add all of them
+        w_e_2 = hk.Linear(self.mid_size, name='We2')
+        edge_fts_l = w_e_2(edge_fts)
+        # print('edge_fts_l', edge_fts_l.shape)   # (b, n, n, f)
+        edge_fts_l = jnp.expand_dims(edge_fts_l, 1) # add the head dim
+        # print('ret', ret.shape)                 # (b, h, n, f)
+                                                # (b, h, n, n, f)
+        # edge_fts_l (32, 16, 16, 4)
+        # ret (32, 1, 16, 4)
+
+        w_e_d = hk.Linear(1, name='Wed')
+
+        s = (jnp.expand_dims(coefs, -1) * edge_fts_l) 
+        o = (0, 1, 2, 4, 3) # s (b, h, n, n, f) -> (b, h, n, f, n)
+        # print('s', s.shape)
+        s = jnp.transpose(s, o)
+        d = jnp.squeeze(w_e_d(s), -1) # (b, h, n, f)
+        # print('d', d.shape)
+        ret = ret + d
+        # print('ret', ret.shape)
+        # exit()
+
+        # edge_fts = jnp.expand_dims(edge_fts[:, :, :, 0], 1) # [B, H, N, N, F]
+        # selected = (coefs * edge_fts) 
+        # dists    = jnp.sum(selected, axis=-1)                      # TODO: Generalize this to a second value layer
+        # print('selected', selected.shape)
+        # print('dists',    dists.shape)
+        # exit()
+        # ret      = ret.at[:, :, :, 0].set(ret[:, :, :, 0] + dists) # TODO: see above, generalize this step
     ret = jnp.transpose(ret, (0, 2, 1, 3))  # [B, N, H, F]
     ret = jnp.reshape(ret, ret.shape[:-2] + (self.out_size,))  # [B, N, H*F]
 
