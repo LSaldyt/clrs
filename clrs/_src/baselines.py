@@ -284,6 +284,8 @@ class BaselineModel(model.Model):
     extra_args[static_arg] = 4
     self.jitted_feedback = func(self._feedback, donate_argnums=[0, 3],
                                 **extra_args)
+    self.jitted_loss = func(self._loss_calc, donate_argnums=[0, 3],
+                                **extra_args)
     extra_args[static_arg] = [3, 4, 5]
     self.jitted_predict = func(self._predict, **extra_args)
     extra_args[static_arg] = [3, 4]
@@ -327,6 +329,13 @@ class BaselineModel(model.Model):
     lss, grads = jax.value_and_grad(self._loss)(
         params, rng_key, feedback, algorithm_index)
     return self._maybe_pmean(lss), self._maybe_pmean(grads)
+
+  def _loss_calc(self, params, rng_key, feedback, opt_state, algorithm_index):
+    lss, grads = jax.value_and_grad(self._loss)(
+        params, rng_key, feedback, algorithm_index)
+    grads = self._maybe_pmean(grads)
+    lss = self._maybe_pmean(lss)
+    return lss, params, opt_state
 
   def _feedback(self, params, rng_key, feedback, opt_state, algorithm_index):
     lss, grads = jax.value_and_grad(self._loss)(
@@ -392,6 +401,20 @@ class BaselineModel(model.Model):
     rng_keys = _maybe_pmap_rng_key(rng_key)  # pytype: disable=wrong-arg-types  # numpy-scalars
     feedback = _maybe_pmap_data(feedback)
     loss, self._device_params, self._device_opt_state = self.jitted_feedback(
+        self._device_params, rng_keys, feedback,
+        self._device_opt_state, algorithm_index)
+    loss = _maybe_pick_first_pmapped(loss)
+    return loss
+
+  def loss(self, rng_key: hk.PRNGSequence, feedback: _Feedback,
+               algorithm_index=None) -> float:
+    if algorithm_index is None:
+      assert len(self._spec) == 1
+      algorithm_index = 0
+    # Calculate and apply gradients.
+    rng_keys = _maybe_pmap_rng_key(rng_key)  # pytype: disable=wrong-arg-types  # numpy-scalars
+    feedback = _maybe_pmap_data(feedback)
+    loss, self._device_params, self._device_opt_state = self.jitted_loss(
         self._device_params, rng_keys, feedback,
         self._device_opt_state, algorithm_index)
     loss = _maybe_pick_first_pmapped(loss)
