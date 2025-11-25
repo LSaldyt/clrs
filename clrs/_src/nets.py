@@ -391,10 +391,16 @@ class Net(hk.Module):
     graph_fts = jnp.zeros((batch_size, self.hidden_dim))
     adj_mat = jnp.repeat(
         jnp.expand_dims(jnp.eye(nb_nodes), 0), batch_size, axis=0)
+    # print('One step pred')
+    # print(node_fts.shape)
+    # print(edge_fts.shape)
+    # print(graph_fts.shape)
+    # print(adj_mat.shape)
 
     # ENCODE ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     # Encode node/edge/graph features from inputs and (optionally) hints.
     trajectories = [inputs]
+    # print(f'WARNING: NO HINTS')
     if self.encode_hints:
       trajectories.append(hints)
 
@@ -409,7 +415,9 @@ class Net(hk.Module):
           node_fts = encoders.accum_node_fts(encoder, dp, node_fts)
           graph_fts = encoders.accum_graph_fts(encoder, dp, graph_fts)
         except Exception as e:
+          raise
           raise Exception(f'Failed to process {dp}') from e
+         
 
     # PROCESS ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     nxt_hidden = hidden

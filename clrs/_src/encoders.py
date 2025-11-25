@@ -82,6 +82,7 @@ def preprocess(dp: _DataPoint, nb_nodes: int) -> _DataPoint:
 
 def accum_adj_mat(dp: _DataPoint, adj_mat: _Array) -> _Array:
   """Accumulates adjacency matrix."""
+  # print('accum', dp.data.shape)
   if dp.location == _Location.NODE and dp.type_ in [_Type.POINTER,
                                                     _Type.PERMUTATION_POINTER]:
     adj_mat += ((dp.data + jnp.transpose(dp.data, (0, 2, 1))) > 0.5)

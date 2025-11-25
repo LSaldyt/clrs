@@ -341,7 +341,7 @@ class GATv2(Processor):
         # ret (32, 1, 16, 4)
 
         w_e_d = hk.Linear(1, name='Wed')
-
+        # coefs: [B, H, N, N]
         s = (jnp.expand_dims(coefs, -1) * edge_fts_l) 
         o = (0, 1, 2, 4, 3) # s (b, h, n, n, f) -> (b, h, n, f, n)
         # print('s', s.shape)
